@@ -14,7 +14,7 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: '缺少 jobRole 或 growthTags 参数' });
   }
 
-  // ── IMA 知识库搜索函数 ─────────────────────────────────────
+  // ── IMA 知识库搜索函数 ────────────────────────────────────
   const IMA_CLIENT_ID = process.env.IMA_CLIENT_ID;
   const IMA_API_KEY   = process.env.IMA_API_KEY;
   const IMA_BASE_URL  = process.env.IMA_BASE_URL || 'https://ima.qq.com';
@@ -24,14 +24,14 @@ module.exports = async function handler(req, res) {
     const body = { query: keyword, cursor: '' };
     if (knowledgeBaseId) body.knowledge_base_id = knowledgeBaseId;
 
-    console.log('[IMA] 搜索参数:', JSON.stringify({ url: IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', body }));
+    console.log('[IMA] 搜索参数:', JSON.stringify({ keyword, knowledgeBaseId }));
 
     const res = await fetch(IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', {
       method: 'POST',
       headers: {
-        'Content-Type':              'application/json',
-        'ima-openapi-clientid':     IMA_CLIENT_ID || '',
-        'ima-openapi-apikey':       IMA_API_KEY || '',
+        'Content-Type':          'application/json',
+        'ima-openapi-clientid':   IMA_CLIENT_ID || '',
+        'ima-openapi-apikey':     IMA_API_KEY || '',
       },
       body: JSON.stringify(body),
     });
@@ -78,10 +78,9 @@ module.exports = async function handler(req, res) {
   for (const tag of growthTags) {
     const searchKeywords = getSearchKeywords(tag);
     let resources = [];
+    let keywordUsed = '';
 
     if (IMA_CLIENT_ID && IMA_API_KEY) {
-      // 用多个简短关键词搜索，取第一个有结果的关键词
-      for (const keyword of searchKeywords) {
       // 用多个简短关键词搜索，取第一个有结果的关键词
       for (const keyword of searchKeywords) {
         try {
@@ -93,8 +92,9 @@ module.exports = async function handler(req, res) {
               title:       r.title || r.name || keyword,
               url:         r.url || r.link || '',
               description: r.snippet || r.description || '',
-              source:       'IMA 知识库',
+              source:      'IMA 知识库',
             }));
+            keywordUsed = keyword;
             break; // 找到结果就停止搜索
           }
         } catch (e) {
@@ -106,9 +106,10 @@ module.exports = async function handler(req, res) {
     // 如果 IMA 没有结果，用 AI 推荐通用资源
     if (resources.length === 0) {
       try {
+        const tagName = tag.tag || tag;
         const prompt = `为以下成长标签推荐 2-3 个学习资源（腾讯/公开课程、文章、视频均可）：
 
-标签：${keyword}
+标签：${tagName}
 岗位：${jobRole}
 
 输出 JSON 数组，每项包含 title / url / description / source。`;
@@ -120,21 +121,21 @@ module.exports = async function handler(req, res) {
       }
     }
 
+    const tagName = tag.tag || tag;
     learningThemes.push({
-      theme:      tag.tag || tag,
+      theme:      tagName,
       category:   tag.category || '通用',
       priority:   tag.priority || 'medium',
       resources:  resources.length > 0 ? resources : [{
-        title:       '待补充：' + keyword,
+        title:       '待补充：' + tagName,
         url:         '',
         description: '请在 IMA 知识库中补充相关学习资源',
-        source:       '待补充',
+        source:      '待补充',
       }],
     });
   }
 
   // ── 生成完整报告 ──────────────────────────────────────────
-  // 注意：prompt 中不直接嵌入 JSON.stringify，避免特殊字符破坏 prompt 结构
   const tagsSummary = growthTags.map(t => `- ${t.tag || t}（${t.category || '通用'}, ${t.priority || 'medium'}）`).join('\n');
   const themesSummary = learningThemes.map(t => `- ${t.theme}：${(t.resources || []).map(r => r.title).join('、') || '待补充'}`).join('\n');
 
