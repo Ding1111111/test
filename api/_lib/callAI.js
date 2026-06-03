@@ -18,7 +18,7 @@ async function callAI(prompt, options = {}) {
 
   // ── Anthropic API ─────────────────────────────────────────────
   if (apiKey.startsWith('sk-ant-')) {
-    const anthropicModel = model || 'claude-sonnet-4-20250514';
+    const anthropicModel = model || 'claude-sonnet-4-6';
     const anthropicURL  = 'https://api.anthropic.com/v1/messages';
 
     const body = {
