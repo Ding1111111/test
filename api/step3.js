@@ -24,6 +24,8 @@ module.exports = async function handler(req, res) {
     const body = { query: keyword, cursor: '' };
     if (knowledgeBaseId) body.knowledge_base_id = knowledgeBaseId;
 
+    console.log('[IMA] 请求参数:', JSON.stringify({ url: IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', body }));
+
     const res = await fetch(IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', {
       method: 'POST',
       headers: {
@@ -34,12 +36,20 @@ module.exports = async function handler(req, res) {
       body: JSON.stringify(body),
     });
 
+    const text = await res.text();
+    console.log('[IMA] HTTP ' + res.status + '，响应：' + text.slice(0, 300));
+
     if (!res.ok) {
-      const text = await res.text();
-      console.error('[IMA] HTTP ' + res.status + ': ' + text);
+      console.error('[IMA] 请求失败 HTTP ' + res.status + ': ' + text);
       return null;
     }
-    return res.json();
+
+    let json;
+    try { json = JSON.parse(text); } catch (e) {
+      console.error('[IMA] JSON 解析失败：' + text.slice(0, 200));
+      return null;
+    }
+    return json;
   }
 
   // ── 为每个成长标签搜索 IMA 资源 ─────────────────────────
@@ -96,23 +106,40 @@ module.exports = async function handler(req, res) {
   }
 
   // ── 生成完整报告 ──────────────────────────────────────────
+  // 注意：prompt 中不直接嵌入 JSON.stringify，避免特殊字符破坏 prompt 结构
+  const tagsSummary = growthTags.map(t => `- ${t.tag || t}（${t.category || '通用'}, ${t.priority || 'medium'}）`).join('\n');
+  const themesSummary = learningThemes.map(t => `- ${t.theme}：${(t.resources || []).map(r => r.title).join('、') || '待补充'}`).join('\n');
+
   const reportPrompt = `你是一个学习路径规划专家。基于以下信息，为每个成长标签生成完整的学习主题描述和建议。
 
-岗位：${jobRole}
-成长标签：${JSON.stringify(growthTags, null, 2)}
-已匹配资源：${JSON.stringify(learningThemes, null, 2)}
+## 岗位
+${jobRole}
 
-输出严格 JSON 格式（不要 Markdown 代码块）：
+## 成长标签列表
+${tagsSummary}
+
+## 已匹配资源（供参考）
+${themesSummary}
+
+## 输出要求
+输出严格 JSON 格式，不要 Markdown 代码块，不要有任何其他文字。
+JSON schema 如下：
 {
-  "jobRole": "${jobRole}",
-  "learningThemes": [{
-    "theme": "主题名",
-    "category": "分类",
-    "priority": "high/medium/low",
-    "description": "主题描述和建议",
-    "resources": [{"title":"资源名","url":"链接","description":"描述","source":"来源"}]
-  }]
-}`;
+  "jobRole": "岗位名",
+  "learningThemes": [
+    {
+      "theme": "主题名（与输入标签对应）",
+      "category": "分类",
+      "priority": "high/medium/low",
+      "description": "200字以内的主题描述和学习建议",
+      "resources": [
+        {"title": "资源名", "url": "链接（无则留空字符串）", "description": "描述", "source": "来源"}
+      ]
+    }
+  ]
+}
+
+注意：learningThemes 的数量必须与输入的成长标签数量一致，顺序对应。`;
 
   try {
     const result = await callAI(reportPrompt, { expectJSON: true });
