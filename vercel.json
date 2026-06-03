@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "functions": {
+    "api/step1.js":   { "maxDuration": 30 },
+    "api/step2.js":   { "maxDuration": 30 },
+    "api/step3.js":   { "maxDuration": 60 },
+    "api/step4.js":   { "maxDuration": 30 }
+  }
+}
