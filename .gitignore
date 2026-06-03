@@ -1,0 +1,20 @@
+# 环境变量（含 API Key，禁止提交）
+.env.local
+.env*.local
+
+# Node
+node_modules/
+package-lock.json
+yarn.lock
+.pnp/
+.pnp.js
+
+# 编辑器的临时文件
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Vercel
+.vercel/

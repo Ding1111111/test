@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GrowthLoop 技能流水线</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --step-1: #6366f1;
+    --step-2: #8b5cf6;
+    --step-3: #06b6d4;
+    --step-4: #10b981;
+    --bg: #f8fafc;
+    --text: #1e293b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    margin: 0;
+  }
+  .step-dot {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px;
+    transition: all 0.3s ease;
+    position: relative; z-index: 2;
+  }
+  .step-dot.active { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(99,102,241,0.2); }
+  .step-dot.done { background: #10b981 !important; color: #fff !important; }
+  .step-dot.waiting { background: #cbd5e1; color: #94a3b8; }
+  .step-dot.s1 { background: var(--step-1); color: #fff; }
+  .step-dot.s2 { background: var(--step-2); color: #fff; }
+  .step-dot.s3 { background: var(--step-3); color: #fff; }
+  .step-dot.s4 { background: var(--step-4); color: #fff; }
+  .connector {
+    height: 3px; flex: 1;
+    background: #e2e8f0;
+    transition: background 0.5s ease;
+  }
+  .connector.done { background: #10b981; }
+  pre {
+    background: #1e293b; color: #e2e8f0;
+    padding: 16px; border-radius: 8px;
+    font-size: 13px; line-height: 1.6;
+    overflow-x: auto; max-height: 500px;
+    overflow-y: auto; white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .fade-in { animation: fadeIn 0.4s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .result-card { border-left: 4px solid; }
+  .r1 { border-color: var(--step-1); }
+  .r2 { border-color: var(--step-2); }
+  .r3 { border-color: var(--step-3); }
+  .r4 { border-color: var(--step-4); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+</style>
+</head>
+<body class="p-4 md:p-8">
+
+<div class="max-w-5xl mx-auto">
+
+  <!-- Header -->
+  <div class="text-center mb-8">
+    <h1 class="text-2xl font-bold text-slate-800">GrowthLoop 技能流水线</h1>
+    <p class="text-slate-500 mt-1 text-sm">
+      jd-behavior-observer &rarr; growthloop-tag-generator &rarr; growthloop-resource-finder &rarr; growthloop-candidate-report
+    </p>
+  </div>
+
+  <!-- Pipeline Visualization -->
+  <div class="flex items-center justify-center gap-0 mb-8 px-4">
+    <div class="flex flex-col items-center gap-1">
+      <div class="step-dot s1" id="dot1">1</div>
+      <span class="text-xs text-slate-500 mt-1">行为观察</span>
+    </div>
+    <div class="connector" id="conn1"></div>
+    <div class="flex flex-col items-center gap-1">
+      <div class="step-dot waiting" id="dot2">2</div>
+      <span class="text-xs text-slate-400 mt-1">标签生成</span>
+    </div>
+    <div class="connector" id="conn2"></div>
+    <div class="flex flex-col items-center gap-1">
+      <div class="step-dot waiting" id="dot3">3</div>
+      <span class="text-xs text-slate-400 mt-1">资源发现</span>
+    </div>
+    <div class="connector" id="conn3"></div>
+    <div class="flex flex-col items-center gap-1">
+      <div class="step-dot waiting" id="dot4">4</div>
+      <span class="text-xs text-slate-400 mt-1">报告生成</span>
+    </div>
+  </div>
+
+  <!-- Main Content Area -->
+  <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6" id="contentArea">
+
+    <!-- Step 1 -->
+    <div id="step1">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="badge text-white" style="background:var(--step-1)">Step 1</span>
+        <h2 class="text-lg font-semibold">jd-behavior-observer &middot; 岗位行为观察</h2>
+      </div>
+      <p class="text-sm text-slate-500 mb-4">输入完整的岗位 JD，由 AI 分析面试中值得观察的关键行为维度。</p>
+      <label class="block text-sm font-medium text-slate-700 mb-2">岗位 JD 文本</label>
+      <textarea id="jdInput" rows="8" class="w-full border border-slate-300 rounded-lg p-3 text-sm transition" placeholder="请粘贴完整的岗位 JD 描述..."></textarea>
+      <div class="flex gap-3 mt-4">
+        <button onclick="loadExampleJD()" class="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition">填入示例</button>
+        <button onclick="runStep1()" id="btnStep1" class="px-6 py-2 text-sm text-white rounded-lg font-medium transition" style="background:var(--step-1)">生成行为维度</button>
+      </div>
+      <div id="step1Result" class="mt-4 hidden"></div>
+      <div id="step1Continue" class="mt-4 hidden">
+        <button onclick="goToStep2()" class="px-6 py-2 text-sm text-white bg-emerald-500 rounded-lg font-medium hover:bg-emerald-600 transition">继续 &rarr; Step 2</button>
+      </div>
+    </div>
+
+    <!-- Step 2 -->
+    <div id="step2" class="hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="badge text-white" style="background:var(--step-2)">Step 2</span>
+        <h2 class="text-lg font-semibold">growthloop-tag-generator &middot; 标签候选池</h2>
+      </div>
+      <p class="text-sm text-slate-500 mb-4">基于 Step 1 的行为维度和面试纪要，由 AI 生成正向/成长标签候选池。</p>
+      <div id="step2InheritedData" class="mb-4 p-3 bg-indigo-50 rounded-lg text-sm">
+        <span class="font-medium text-indigo-700">已继承 Step 1 数据：</span>
+        <span id="step2InheritedSummary" class="text-indigo-600"></span>
+      </div>
+      <label class="block text-sm font-medium text-slate-700 mb-2">面试会议纪要</label>
+      <textarea id="meetingInput" rows="8" class="w-full border border-slate-300 rounded-lg p-3 text-sm transition" placeholder="请粘贴面试会议纪要..."></textarea>
+      <div class="flex gap-3 mt-4">
+        <button onclick="loadExampleMeeting()" class="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition">填入示例</button>
+        <button onclick="runStep2()" id="btnStep2" class="px-6 py-2 text-sm text-white rounded-lg font-medium transition" style="background:var(--step-2)">生成标签候选池</button>
+      </div>
+      <div id="step2Result" class="mt-4 hidden"></div>
+      <div id="step2Continue" class="mt-4 hidden">
+        <button onclick="goToStep3()" class="px-6 py-2 text-sm text-white bg-emerald-500 rounded-lg font-medium hover:bg-emerald-600 transition">继续 &rarr; Step 3</button>
+      </div>
+    </div>
+
+    <!-- Step 3 -->
+    <div id="step3" class="hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="badge text-white" style="background:var(--step-3)">Step 3</span>
+        <h2 class="text-lg font-semibold">growthloop-resource-finder &middot; 资源发现</h2>
+      </div>
+      <p class="text-sm text-slate-500 mb-4">基于 Step 2 的成长标签，由 AI 在知识库中发现匹配的学习主题与资源。</p>
+      <div id="step3InheritedData" class="mb-4 p-3 bg-cyan-50 rounded-lg text-sm">
+        <span class="font-medium text-cyan-700">已继承 Step 2 成长标签：</span>
+        <span id="step3InheritedSummary" class="text-cyan-600"></span>
+      </div>
+      <button onclick="runStep3()" id="btnStep3" class="px-6 py-2 text-sm text-white rounded-lg font-medium transition" style="background:var(--step-3)">检索学习资源</button>
+      <div id="step3Result" class="mt-4 hidden"></div>
+      <div id="step3Continue" class="mt-4 hidden">
+        <button onclick="goToStep4()" class="px-6 py-2 text-sm text-white bg-emerald-500 rounded-lg font-medium hover:bg-emerald-600 transition">继续 &rarr; Step 4</button>
+      </div>
+    </div>
+
+    <!-- Step 4 -->
+    <div id="step4" class="hidden">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="badge text-white" style="background:var(--step-4)">Step 4</span>
+        <h2 class="text-lg font-semibold">growthloop-candidate-report &middot; 成长纪念册</h2>
+      </div>
+      <p class="text-sm text-slate-500 mb-4">融合所有前序结果，由 AI 生成候选人成长纪念册 JSON。</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">候选人姓名 <span class="text-red-400">*</span></label>
+          <input id="candidateName" type="text" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm transition" placeholder="例如：张明远">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">面试日期</label>
+          <input id="interviewDate" type="date" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm transition">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">面试轮次</label>
+          <input id="interviewRound" type="text" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm transition" placeholder="例如：初试">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">报告日期</label>
+          <input id="reportDate" type="date" class="w-full border border-slate-300 rounded-lg p-2.5 text-sm transition">
+        </div>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="loadExampleCandidate()" class="px-4 py-2 text-sm border border-slate-300 rounded-lg hover:bg-slate-50 transition">填入示例</button>
+        <button onclick="runStep4()" id="btnStep4" class="px-6 py-2 text-sm text-white rounded-lg font-medium transition" style="background:var(--step-4)">生成成长纪念册</button>
+      </div>
+      <div id="step4Result" class="mt-4 hidden"></div>
+    </div>
+
+  </div>
+
+  <!-- State Panel -->
+  <div id="statePanel" class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+    <div class="flex items-center justify-between mb-3">
+      <h3 class="text-sm font-semibold text-slate-700">流水线状态</h3>
+      <button onclick="resetAll()" class="text-xs text-red-500 hover:text-red-700 transition">重置全部</button>
+    </div>
+    <div class="flex gap-2 flex-wrap" id="stateBadges">
+      <span class="badge bg-slate-100 text-slate-400">等待开始</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const state = {
+  currentStep: 1,
+  step1: { done: false, data: null },
+  step2: { done: false, data: null },
+  step3: { done: false, data: null },
+  step4: { done: false, data: null }
+};
+
+function el(id) { return document.getElementById(id); }
+
+function updatePipeline() {
+  [1,2,3,4].forEach(function(n) {
+    var dot = el('dot' + n);
+    dot.className = 'step-dot';
+    if (state['step' + n].done) {
+      dot.classList.add('done');
+      dot.textContent = '\u2713';
+    } else if (state.currentStep === n) {
+      dot.classList.add('s' + n);
+      dot.classList.add('active');
+      dot.textContent = n;
+    } else {
+      dot.classList.add('waiting');
+      dot.textContent = n;
+    }
+    var label = dot.parentElement.querySelector('span');
+    if (label) {
+      if (state['step' + n].done) label.className = 'text-xs text-emerald-500 mt-1 font-medium';
+      else if (state.currentStep === n) label.className = 'text-xs text-slate-700 mt-1 font-medium';
+      else label.className = 'text-xs text-slate-400 mt-1';
+    }
+  });
+  ['conn1','conn2','conn3'].forEach(function(id, i) {
+    var conn = el(id);
+    conn.className = 'connector' + (state['step' + (i+1)].done ? ' done' : '');
+  });
+}
+
+function showStep(n) {
+  ['step1','step2','step3','step4'].forEach(function(id, i) {
+    el(id).classList.toggle('hidden', i + 1 !== n);
+  });
+  state.currentStep = n;
+  updatePipeline();
+  updateStatePanel();
+}
+
+function updateStatePanel() {
+  var badges = [];
+  [1,2,3,4].forEach(function(n) {
+    if (state['step' + n].done) {
+      badges.push('<span class="badge text-white" style="background:var(--step-' + n + ')">Step ' + n + ' \u2713</span>');
+    } else {
+      badges.push('<span class="badge bg-slate-100 text-slate-400">Step ' + n + '</span>');
+    }
+  });
+  el('stateBadges').innerHTML = badges.join('');
+}
+
+function showResult(containerId, title, jsonData, colorClass) {
+  var c = el(containerId);
+  c.innerHTML = '<div class="result-card ' + colorClass + ' bg-white rounded-lg p-4 fade-in"><h4 class="text-sm font-semibold text-slate-700 mb-2">' + title + '</h4><pre>' + JSON.stringify(jsonData, null, 2).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</pre></div>';
+  c.classList.remove('hidden');
+}
+
+function setBtnLoading(btnId, loading) {
+  var btn = el(btnId);
+  if (loading) {
+    btn._orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.style.opacity = '0.6';
+    btn.style.cursor = 'not-allowed';
+    btn.innerHTML = '<span class="spinner"></span>生成中...';
+  } else {
+    btn.innerHTML = btn._orig;
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor = '';
+  }
+}
+
+function showError(containerId, msg) {
+  var c = el(containerId);
+  c.innerHTML = '<div class="bg-red-50 border border-red-200 rounded-lg p-4 fade-in"><p class="text-sm text-red-600">' + msg + '</p></div>';
+  c.classList.remove('hidden');
+}
+
+// API Base URL
+var API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') ? 'http://localhost:3000' : '';
+
+async function callAPI(endpoint, body) {
+  var res = await fetch(API_BASE + '/api/' + endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    var err = await res.json().catch(function() { return {}; });
+    throw new Error(err.error || '请求失败 (' + res.status + ')');
+  }
+  return res.json();
+}
+
+// ===== Step 1 =====
+function loadExampleJD() {
+  el('jdInput').value = '岗位名称：产品经理（校招）\n\n岗位职责：\n1. 负责产品功能规划与需求分析，输出高质量的 PRD 文档\n2. 深入理解用户需求，通过数据分析和用户调研发现产品优化机会\n3. 协调设计、开发、测试等团队推动产品功能落地\n4. 关注行业动态和竞品分析，持续迭代产品方案\n5. 参与产品上线后的数据监控与效果评估\n\n任职要求：\n1. 本科及以上学历，计算机、设计、心理学等相关专业优先\n2. 具备较强的逻辑思维和数据分析能力\n3. 优秀的沟通协作能力，能有效推动跨团队合作\n4. 对互联网产品有浓厚兴趣，有产品实习经验者优先\n5. 具备用户视角，能站在用户角度思考产品问题';
+}
+
+async function runStep1() {
+  var jdText = el('jdInput').value.trim();
+  if (!jdText) { alert('请先输入岗位 JD 文本'); return; }
+  setBtnLoading('btnStep1', true);
+  try {
+    var result = await callAPI('step1', { jd: jdText });
+    state.step1.data = result;
+    state.step1.done = true;
+    showResult('step1Result', '行为观察维度输出', result, 'r1');
+    el('step1Continue').classList.remove('hidden');
+  } catch(e) {
+    showError('step1Result', '调用失败：' + e.message);
+  }
+  setBtnLoading('btnStep1', false);
+  updatePipeline();
+  updateStatePanel();
+}
+
+function goToStep2() {
+  var d = state.step1.data;
+  var summary = d.focusBehaviors.map(function(b) { return b.behavior; }).join('、');
+  el('step2InheritedSummary').textContent = '岗位\u300c' + d.jobRole + '\u300d \u00b7 ' + d.focusBehaviors.length + ' 个行为维度\uff1a' + summary;
+  showStep(2);
+}
+
+// ===== Step 2 =====
+function loadExampleMeeting() {
+  el('meetingInput').value = '面试纪要 - 产品经理初试\n\n候选人：张明远\n时间：2026-05-20 14:00-14:45\n\n[00:00-05:00] 开场自我介绍\n候选人介绍了自己在校期间参与的两个产品项目，一个是校园二手交易小程序，另一个是课程评价工具。表达流畅，对项目背景交代清楚。\n\n[05:00-15:00] 产品思维考察\n面试官提出"如何提升校园小程序的用户留存"。\n候选人从用户使用场景出发，分析了学生群体的三个核心需求：便捷交易、信任建立、信息匹配。提出可以增加"校友认证"功能提升信任感。\n在讨论中，候选人主动补充："另外我观察到很多同学在期末考试后会集中出售教材，可以做一个\'考试季专区\'来抓住这个时间窗口。"\n面试官追问"如何验证这个功能的有效性"，候选人回应可以通过 A/B 测试对比专区上线前后的交易量变化。\n\n[15:00-25:00] 需求分析能力\n面试官给出一个模糊需求："做一个帮助新生融入校园的功能"。\n候选人先确认了几个关键点：目标用户是大一新生还是包含研究生、使用场景是开学季还是持续使用。然后将需求拆解为"信息获取""社交连接""生活服务"三个模块，并分别描述了每个模块的核心功能。\n在拆解过程中，候选人提到"具体的技术实现我还没有想得很清楚，可能需要前后端配合"。\n\n[25:00-35:00] 协作与沟通\n面试官询问"如果在项目中与设计师意见不一致怎么办"。\n候选人表示会先理解设计师的出发点，然后通过用户数据来辅助决策。分享了之前项目中与设计师协作的具体案例，提到"当时设计师坚持用某个交互方式，我们做了5个用户的快速测试后，数据帮助我们达成了一致"。\n\n[35:00-45:00] 反问环节\n候选人询问了团队的产品迭代节奏和新人培养机制。';
+}
+
+async function runStep2() {
+  var meetingText = el('meetingInput').value.trim();
+  if (!meetingText) { alert('请先输入面试会议纪要'); return; }
+  setBtnLoading('btnStep2', true);
+  try {
+    var result = await callAPI('step2', {
+      jobRole: state.step1.data.jobRole,
+      focusBehaviors: state.step1.data.focusBehaviors,
+      meetingMinutes: meetingText
+    });
+    state.step2.data = result;
+    state.step2.done = true;
+    var pt = (result.positiveTags || []).length;
+    var gt = (result.growthTags || []).length;
+    showResult('step2Result', '\u6807\u7b7e\u5019\u9009\u6c60 \u00b7 \u6b63\u5411 ' + pt + ' \u4e2a \u00b7 \u6210\u957f ' + gt + ' \u4e2a', result, 'r2');
+    el('step2Continue').classList.remove('hidden');
+  } catch(e) {
+    showError('step2Result', '\u8c03\u7528\u5931\u8d25\uff1a' + e.message);
+  }
+  setBtnLoading('btnStep2', false);
+  updatePipeline();
+  updateStatePanel();
+}
+
+function goToStep3() {
+  var gt = state.step2.data.growthTags || [];
+  el('step3InheritedSummary').textContent = gt.length > 0
+    ? gt.map(function(t) { return '\u300c' + t.tag + '\u300d'; }).join('\u3001')
+    : '\uff08\u65e0\u6210\u957f\u6807\u7b7e\uff09';
+  showStep(3);
+}
+
+// ===== Step 3 =====
+async function runStep3() {
+  setBtnLoading('btnStep3', true);
+  try {
+    var result = await callAPI('step3', {
+      jobRole: state.step1.data.jobRole,
+      positiveTags: state.step2.data.positiveTags,
+      growthTags: state.step2.data.growthTags
+    });
+    state.step3.data = result;
+    state.step3.done = true;
+    var themes = (result.learningThemes || []).length;
+    var resources = (result.learningThemes || []).reduce(function(a, t) { return a + (t.resources || []).length; }, 0);
+    showResult('step3Result', '\u5b66\u4e60\u4e3b\u9898\u4e0e\u8d44\u6e90 \u00b7 ' + themes + ' \u4e2a\u4e3b\u9898 \u00b7 ' + resources + ' \u6761\u8d44\u6e90', result, 'r3');
+    el('step3Continue').classList.remove('hidden');
+  } catch(e) {
+    showError('step3Result', '\u8c03\u7528\u5931\u8d25\uff1a' + e.message);
+  }
+  setBtnLoading('btnStep3', false);
+  updatePipeline();
+  updateStatePanel();
+}
+
+function goToStep4() { showStep(4); }
+
+// ===== Step 4 =====
+function loadExampleCandidate() {
+  el('candidateName').value = '张明远';
+  el('interviewDate').value = '2026-05-20';
+  el('interviewRound').value = '初试';
+  el('reportDate').value = new Date().toISOString().split('T')[0];
+}
+
+async function runStep4() {
+  var name = el('candidateName').value.trim();
+  if (!name) { alert('\u8bf7\u586b\u5199\u5019\u9009\u4eba\u59d3\u540d'); return; }
+  setBtnLoading('btnStep4', true);
+  try {
+    var result = await callAPI('step4', {
+      candidateInfo: {
+        candidateName: name,
+        jobRole: state.step1.data.jobRole,
+        interviewDate: el('interviewDate').value || '',
+        interviewRound: el('interviewRound').value || '',
+        reportDate: el('reportDate').value || new Date().toISOString().split('T')[0]
+      },
+      positiveTags: state.step2.data.positiveTags,
+      learningThemes: state.step3.data.learningThemes
+    });
+    state.step4.data = result;
+    state.step4.done = true;
+    showResult('step4Result', '\u6210\u957f\u7eaa\u5ff5\u518c JSON \u00b7 \u5b8c\u6574\u8f93\u51fa', result, 'r4');
+  } catch(e) {
+    showError('step4Result', '\u8c03\u7528\u5931\u8d25\uff1a' + e.message);
+  }
+  setBtnLoading('btnStep4', false);
+  updatePipeline();
+  updateStatePanel();
+  if (state.step4.done) el('step4Result').scrollIntoView({ behavior: 'smooth' });
+}
+
+// ===== Reset =====
+function resetAll() {
+  if (!confirm('\u786e5b9a\u8981\u91cd\u7f6e\u6240\u6709\u6570\u636e\u5417\uff1f')) return;
+  ['step1','step2','step3','step4'].forEach(function(k) { state[k] = { done: false, data: null }; });
+  state.currentStep = 1;
+  ['jdInput','meetingInput','candidateName','interviewDate','interviewRound','reportDate'].forEach(function(id) { if(el(id)) el(id).value = ''; });
+  ['step1Result','step2Result','step3Result','step4Result'].forEach(function(id) { el(id).classList.add('hidden'); el(id).innerHTML = ''; });
+  ['step1Continue','step2Continue','step3Continue'].forEach(function(id) { el(id).classList.add('hidden'); });
+  showStep(1);
+  updateStatePanel();
+}
+
+// ===== Init =====
+showStep(1);
+updateStatePanel();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+  "name": "growthloop-web",
+  "version": "1.0.0",
+  "description": "GrowthLoop 技能流水线 - 前端 + Vercel Serverless Functions",
+  "scripts": {
+    "dev": "vercel dev --yes",
+    "deploy": "vercel --prod"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
