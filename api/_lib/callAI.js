@@ -8,13 +8,13 @@
 const fetch = globalThis.fetch; // Node 18+ 内置
 
 async function callAI(prompt, options = {}) {
-  const apiKey     = process.env.OPENAI_API_KEY;
+  const apiKey     = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '';
   const baseURL    = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
   const model      = process.env.AI_MODEL || '';
   const maxTokens  = options.maxTokens || 4096;
   const expectJSON = options.expectJSON !== false;
 
-  if (!apiKey) throw new Error('缺少 OPENAI_API_KEY 环境变量');
+  if (!apiKey) throw new Error('缺少 ANTHROPIC_API_KEY 或 OPENAI_API_KEY 环境变量');
 
   // ── Anthropic API ─────────────────────────────────────────────
   if (apiKey.startsWith('sk-ant-')) {
