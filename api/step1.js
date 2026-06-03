@@ -2,11 +2,9 @@
  * Step1: jd-behavior-observer
  * 输入 JD 文本 → 输出行为观察维度 JSON
  */
-export const config = { maxDuration: 30 };
+const { callAI } = require('./_lib/callAI.js');
 
-import { callAI } from './_lib/callAI.js';
-
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const { jd } = req.body;
@@ -41,4 +39,4 @@ ${jd}
     console.error('Step1 error:', e);
     return res.status(500).json({ error: e.message });
   }
-}
+};

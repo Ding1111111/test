@@ -1,14 +1,7 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "index.html", "use": "@vercel/static" },
-    { "src": "api/step1.js", "use": "@vercel/node" },
-    { "src": "api/step2.js", "use": "@vercel/node" },
-    { "src": "api/step3.js", "use": "@vercel/node" },
-    { "src": "api/step4.js", "use": "@vercel/node" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "regions": ["sfo1"],
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/" }
   ]
 }
