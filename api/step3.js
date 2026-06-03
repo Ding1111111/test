@@ -134,51 +134,11 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // ── 生成完整报告 ──────────────────────────────────────────
-  const tagsSummary = growthTags.map(t => `- ${t.tag || t}（${t.category || '通用'}, ${t.priority || 'medium'}）`).join('\n');
-  const themesSummary = learningThemes.map(t => `- ${t.theme}：${(t.resources || []).map(r => r.title).join('、') || '待补充'}`).join('\n');
-
-  const reportPrompt = `你是一个学习路径规划专家。基于以下信息，为每个成长标签生成完整的学习主题描述和建议。
-
-## 岗位
-${jobRole}
-
-## 成长标签列表
-${tagsSummary}
-
-## 已匹配资源（供参考）
-${themesSummary}
-
-## 输出要求
-输出严格 JSON 格式，不要 Markdown 代码块，不要有任何其他文字。
-JSON schema 如下：
-{
-  "jobRole": "岗位名",
-  "learningThemes": [
-    {
-      "theme": "主题名（与输入标签对应）",
-      "category": "分类",
-      "priority": "high/medium/low",
-      "description": "200字以内的主题描述和学习建议",
-      "resources": [
-        {"title": "资源名", "url": "链接（无则留空字符串）", "description": "描述", "source": "来源"}
-      ]
-    }
-  ]
-}
-
-注意：learningThemes 的数量必须与输入的成长标签数量一致，顺序对应。`;
-
-  try {
-    const result = await callAI(reportPrompt, { expectJSON: true });
-    return res.status(200).json(result);
-  } catch (e) {
-    console.error('Step3 error:', e);
-    // 降级：返回已收集的数据
-    return res.status(200).json({
-      jobRole,
-      learningThemes,
-      note: 'AI 报告生成失败，返回原始匹配结果：' + e.message,
-    });
-  }
+  // ── 直接返回，不再调用 AI 生成报告（避免超时） ──────────
+  console.log('[Step3] 完成，共 ' + learningThemes.length + ' 个主题');
+  return res.status(200).json({
+    jobRole,
+    learningThemes,
+    note: '基于 IMA 知识库匹配结果，已跳过 AI 报告生成',
+  });
 };

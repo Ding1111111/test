@@ -14,63 +14,81 @@ async function callAI(prompt, options = {}) {
 
   if (!apiKey) throw new Error('缺少 ANTHROPIC_API_KEY 或 OPENAI_API_KEY 环境变量');
 
-  // ── Anthropic API ─────────────────────────────────────────────
-  if (apiKey.startsWith('sk-ant-')) {
-    const anthropicModel = model || 'claude-sonnet-4-6';
-    const anthropicURL  = 'https://api.anthropic.com/v1/messages';
+  // ── 超时控制（Vercel maxDuration - 10s 缓冲）──────────
+  const controller = new AbortController();
+  const timeoutId  = setTimeout(() => controller.abort(), 50000);
 
-    const body = {
-      model:      anthropicModel,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content: prompt }],
-    };
+  try {
 
-    if (expectJSON) {
-      body.system = 'You must respond with valid JSON only. No markdown fences, no explanations, no extra text.';
+    // ── Anthropic API ────────────────────────────────────────
+    if (apiKey.startsWith('sk-ant-')) {
+      const anthropicModel = model || 'claude-sonnet-4-6';
+      const anthropicURL  = 'https://api.anthropic.com/v1/messages';
+
+      const body = {
+        model:      anthropicModel,
+        max_tokens: maxTokens,
+        messages: [{ role: 'user', content: prompt }],
+      };
+
+      if (expectJSON) {
+        body.system = 'You must respond with valid JSON only. No markdown fences, no explanations, no extra text.';
+      }
+
+      const res = await fetch(anthropicURL, {
+        method:  'POST',
+        headers: {
+          'x-api-key':       apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type':    'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error('Anthropic API 错误 (' + res.status + '): ' + (data.error?.message || JSON.stringify(data)));
+      }
+
+      // 安全提取 text
+      const firstBlock = Array.isArray(data.content) ? data.content[0] : null;
+      const text = firstBlock?.text || '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      const jsonStr   = jsonMatch ? jsonMatch[0] : text;
+      return JSON.parse(jsonStr);
     }
 
-    const res = await fetch(anthropicURL, {
+    // ── OpenAI 兼容 API ───────────────────────────────────────
+    const openaiModel = model || 'gpt-4o-mini';
+    const res = await fetch(baseURL + '/chat/completions', {
       method: 'POST',
       headers: {
-        'x-api-key':       apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type':    'application/json',
+        'Content-Type':  'application/json',
+        'Authorization': 'Bearer ' + apiKey,
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        model:           openaiModel,
+        messages:        [{ role: 'user', content: prompt }],
+        response_format: expectJSON ? { type: 'json_object' } : undefined,
+      }),
+      signal: controller.signal,
     });
 
+    clearTimeout(timeoutId);
     const data = await res.json();
+
     if (!res.ok) {
-      throw new Error('Anthropic API 错误 (' + res.status + '): ' + (data.error?.message || JSON.stringify(data)));
+      throw new Error('AI API 错误 (' + res.status + '): ' + (data.error?.message || JSON.stringify(data)));
     }
 
-    const text = data.content?.[0]?.text || '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    const jsonStr   = jsonMatch ? jsonMatch[0] : text;
-    return JSON.parse(jsonStr);
+    return JSON.parse(data.choices[0].message.content);
+
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  // ── OpenAI 兼容 API ───────────────────────────────────────────
-  const openaiModel = model || 'gpt-4o-mini';
-  const res = await fetch(baseURL + '/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type':  'application/json',
-      'Authorization': 'Bearer ' + apiKey,
-    },
-    body: JSON.stringify({
-      model:           openaiModel,
-      messages:        [{ role: 'user', content: prompt }],
-      response_format: expectJSON ? { type: 'json_object' } : undefined,
-    }),
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error('AI API 错误 (' + res.status + '): ' + (data.error?.message || JSON.stringify(data)));
-  }
-
-  return JSON.parse(data.choices[0].message.content);
 }
 
 module.exports = { callAI };
