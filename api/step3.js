@@ -18,13 +18,13 @@ module.exports = async function handler(req, res) {
   const IMA_CLIENT_ID = process.env.IMA_CLIENT_ID;
   const IMA_API_KEY   = process.env.IMA_API_KEY;
   const IMA_BASE_URL  = process.env.IMA_BASE_URL || 'https://ima.qq.com';
-  const IMA_KB_ID     = process.env.IMA_KNOWLEDGE_BASE_ID || '';
+  const IMA_KB_ID     = process.env.IMA_KNOWLEDGE_BASE_ID || 'ZjU16hYUQTf71bvkP9t_0zfWqiEkOdo-kap5YExwMRg=';
 
   async function searchIMA(keyword, knowledgeBaseId) {
     const body = { query: keyword, cursor: '' };
     if (knowledgeBaseId) body.knowledge_base_id = knowledgeBaseId;
 
-    console.log('[IMA] 请求参数:', JSON.stringify({ url: IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', body }));
+    console.log('[IMA] 搜索参数:', JSON.stringify({ url: IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', body }));
 
     const res = await fetch(IMA_BASE_URL + '/openapi/wiki/v1/search_knowledge', {
       method: 'POST',
@@ -37,7 +37,7 @@ module.exports = async function handler(req, res) {
     });
 
     const text = await res.text();
-    console.log('[IMA] HTTP ' + res.status + '，响应：' + text.slice(0, 300));
+    console.log('[IMA] HTTP ' + res.status + '，首200字符：' + text.slice(0, 200));
 
     if (!res.ok) {
       console.error('[IMA] 请求失败 HTTP ' + res.status + ': ' + text);
@@ -49,29 +49,57 @@ module.exports = async function handler(req, res) {
       console.error('[IMA] JSON 解析失败：' + text.slice(0, 200));
       return null;
     }
+
+    if (json.code !== 0) {
+      console.error('[IMA] 业务错误 code=' + json.code + ': ' + (json.msg || ''));
+      return null;
+    }
+
     return json;
   }
 
   // ── 为每个成长标签搜索 IMA 资源 ─────────────────────────
   const learningThemes = [];
 
+  // IMA 知识库搜索关键词映射：用简短关键词代替完整标签名
+  function getSearchKeywords(tag) {
+    const category = tag.category || '';
+    if (category.includes('好奇心') || category.includes('探索') || category.includes('主动')) return ['实习', '成长'];
+    if (category.includes('结构化') || category.includes('逻辑') || category.includes('拆解')) return ['拆解', '分析'];
+    if (category.includes('跨界') || category.includes('整合')) return ['协作', '整合'];
+    if (category.includes('同理心') || category.includes('用户')) return ['用户', '产品经理'];
+    if (category.includes('代码') || category.includes('技术') || category.includes('AI')) return ['技术', 'AI'];
+    if (category.includes('HR') || category.includes('人力') || category.includes('行业')) return ['HR', '培训'];
+    if (category.includes('学习') || category.includes('成长') || category.includes('敏捷')) return ['成长', '复盘'];
+    if (category.includes('表达') || category.includes('商业') || category.includes('方案')) return ['表达', '沟通'];
+    return [tag.tag ? tag.tag.slice(0, 10) : '校招'];
+  }
+
   for (const tag of growthTags) {
-    const keyword = tag.tag || tag;
+    const searchKeywords = getSearchKeywords(tag);
     let resources = [];
 
     if (IMA_CLIENT_ID && IMA_API_KEY) {
-      try {
-        const imaResult = await searchIMA(keyword, IMA_KB_ID || undefined);
-        if (imaResult && imaResult.data) {
-          resources = (imaResult.data.results || []).slice(0, 3).map(r => ({
-            title:       r.title || r.name || keyword,
-            url:         r.url || r.link || '',
-            description: r.snippet || r.description || '',
-            source:       'IMA 知识库',
-          }));
+      // 用多个简短关键词搜索，取第一个有结果的关键词
+      for (const keyword of searchKeywords) {
+      // 用多个简短关键词搜索，取第一个有结果的关键词
+      for (const keyword of searchKeywords) {
+        try {
+          const imaResult = await searchIMA(keyword, IMA_KB_ID || undefined);
+          const items = (imaResult && imaResult.data && imaResult.data.info_list) || [];
+          if (items.length > 0) {
+            console.log(`[IMA] 关键词 "${keyword}" 找到 ${items.length} 条结果`);
+            resources = items.slice(0, 3).map(r => ({
+              title:       r.title || r.name || keyword,
+              url:         r.url || r.link || '',
+              description: r.snippet || r.description || '',
+              source:       'IMA 知识库',
+            }));
+            break; // 找到结果就停止搜索
+          }
+        } catch (e) {
+          console.error('[IMA] 搜索出错 "' + keyword + '":', e.message);
         }
-      } catch (e) {
-        console.error('[IMA] search error for "' + keyword + '":', e.message);
       }
     }
 
