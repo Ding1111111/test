@@ -4,7 +4,6 @@
  * 调用 IMA 知识库搜索匹配资源
  */
 const { callAI } = require('./_lib/callAI.js');
-const fetch = globalThis.fetch;
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

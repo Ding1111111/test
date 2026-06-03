@@ -5,8 +5,6 @@
  *   其他        → OpenAI 兼容 API
  */
 
-const fetch = globalThis.fetch; // Node 18+ 内置
-
 async function callAI(prompt, options = {}) {
   const apiKey     = process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY || '';
   const baseURL    = (process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1').replace(/\/+$/, '');
