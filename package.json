@@ -10,6 +10,10 @@
     "node": ">=18"
   },
   "dependencies": {
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "jsdom": "^29.1.1",
+    "openai": "^6.42.0",
+    "pdf-parse": "^2.4.5",
+    "pdf2json": "^4.0.3"
   }
 }

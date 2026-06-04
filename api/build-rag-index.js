@@ -18,6 +18,16 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const { JSDOM } = require('jsdom');
+const { execSync } = require('child_process');
+
+// 手动加载 .env.local（兼容无 dotenv 的情况）
+try {
+  const envFile = fs.readFileSync(path.resolve(__dirname, '..', '.env.local'), 'utf8');
+  for (const line of envFile.split('\n')) {
+    const [k, ...v] = line.split('=');
+    if (k && v.length) process.env[k.trim()] = v.join('=').trim();
+  }
+} catch (e) { /* 忽略 */ }
 
 const KNOWLEDGE_DIR = '/Users/dingding/.workbuddy/knowledge-base/Knowledge';
 const OUTPUT_FILE = path.resolve(__dirname, 'knowledge-rag.json');
@@ -133,16 +143,35 @@ function extractTextFromHTML(htmlPath) {
   }
 }
 
-// 从文件路径推断分类
-function inferCategory(filePath) {
-  const relativePath = path.relative(KNOWLEDGE_DIR, filePath);
-  const parts = relativePath.split(path.sep);
-  if (parts.length > 1) {
-    // 用第一层文件夹名作为分类
-    return parts[0].replace(/\.html$/, '');
+// 提取 PDF 纯文本（使用 Python pymupdf）
+async function extractTextFromPDF(pdfPath) {
+  try {
+    const scriptPath = path.resolve(__dirname, 'extract-pdf-text.py');
+    const pythonPath = '/Users/dingding/.workbuddy/binaries/python/versions/3.13.12/bin/python3';
+    // execSync 同步调用，stdout 即为提取的文本
+    const stdout = execSync(`"${pythonPath}" "${scriptPath}" "${pdfPath}"`, {
+      encoding: 'utf8',
+      timeout: 30000, // 30秒超时
+      maxBuffer: 10 * 1024 * 1024, // 10MB 输出缓冲
+    });
+    const text = (stdout || '').replace(/\s+/g, ' ').trim();
+    return text;
+  } catch (e) {
+    console.error(`  ⚠️ PDF 解析失败: ${path.basename(pdfPath)} - ${e.message}`);
+    return '';
   }
-  return '校招通用';
 }
+
+      // 从文件路径推断分类
+      function inferCategory(filePath) {
+        const relativePath = path.relative(KNOWLEDGE_DIR, filePath);
+        const parts = relativePath.split(path.sep);
+        if (parts.length > 1) {
+          // 用第一层文件夹名作为分类
+          return parts[0];
+        }
+        return '校招通用';
+      }
 
 // 智能切片（500-800字，优先在标点处切）
 function chunkText(text, minSize = CHUNK_SIZE_MIN, maxSize = CHUNK_SIZE_MAX) {
@@ -223,7 +252,9 @@ async function generateResourceCard(title, content, category) {
 // ── 主流程 ────────────────────────────────────────────────
 
 async function main() {
-  console.log('=== RAG 知识库预处理开始 ===\n');
+  const LIMIT = process.env.LIMIT ? parseInt(process.env.LIMIT) : Infinity;
+  console.log('=== RAG 知识库预处理开始 ===');
+  if (LIMIT < Infinity) console.log(`⚠️  限制模式：只处理前 ${LIMIT} 个文件\n`);
   
   if (!getOpenAIKey()) {
     console.error('❌ 错误：未找到 OPENAI_API_KEY 环境变量');
@@ -233,7 +264,7 @@ async function main() {
   
   // 1. 扫描所有文件
   console.log('[1/5] 扫描知识库文件...');
-  const files = [];
+  let files = [];
   
   function walkDir(dir) {
     const items = fs.readdirSync(dir, { withFileTypes: true });
@@ -243,13 +274,17 @@ async function main() {
         walkDir(fullPath);
       } else if (item.name.endsWith('.html') || item.name.endsWith('.htm')) {
         files.push(fullPath);
+      } else if (item.name.endsWith('.pdf')) {
+        files.push(fullPath);
       }
-      // PDF 暂时跳过（需要额外解析）
     }
   }
   
   walkDir(KNOWLEDGE_DIR);
-  console.log(`  找到 ${files.length} 个 HTML 文件\n`);
+  files = files.slice(0, LIMIT);
+  const htmlCount = files.filter(f => f.endsWith('.html') || f.endsWith('.htm')).length;
+  const pdfCount = files.filter(f => f.endsWith('.pdf')).length;
+  console.log(`  找到 ${files.length} 个文件（HTML: ${htmlCount}，PDF: ${pdfCount}）\n`);
   
   // 2. 处理每个文件
   console.log('[2/5] 提取正文 + 生成资源卡...');
@@ -258,20 +293,31 @@ async function main() {
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const relativePath = path.relative(KNOWLEDGE_DIR, file);
-    const title = path.basename(file, '.html').replace(/_/g, ' ');
+    const ext = path.extname(file).toLowerCase();
+    const baseName = path.basename(file, ext);
+    const title = baseName.replace(/_/g, ' ');
     const category = inferCategory(file);
-    const content = extractTextFromHTML(file);
+
+    let content = '';
+    if (ext === '.pdf') {
+      console.log(`  📄 PDF 文件，使用文件名+分类作为内容...`);
+      // PDF 文本提取较困难，直接用文件名 + 分类作为语义内容
+      content = baseName.replace(/-/g, ' ') + ' ' + category;
+    } else {
+      content = extractTextFromHTML(file);
+    }
     
     console.log(`  [${i+1}/${files.length}] ${title.slice(0, 40)}...`);
     
     // 生成资源卡（调 AI）
     const card = await generateResourceCard(title, content, category);
     
+    const fileType = ext === '.pdf' ? 'pdf' : 'html';
     records.push({
       id: `res-${String(i).padStart(4, '0')}`,
       title,
       category,
-      type: 'html',
+      type: fileType,
       path: relativePath,
       // 资源卡字段
       summary: card.summary,
