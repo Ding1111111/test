@@ -1,98 +1,136 @@
-/**
- * 预处理 Knowledge 文件夹 → 生成 knowledge-index.json 搜索索引
- * 用法: node build-knowledge-index.js
- */
-
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
+// Knowledge 文件夹路径（macOS）
 const KNOWLEDGE_DIR = '/Users/dingding/.workbuddy/knowledge-base/Knowledge';
-const OUTPUT_FILE  = path.resolve(__dirname, 'knowledge-index.json');
+const OUTPUT_FILE = path.resolve(__dirname, 'knowledge-index.json');
 
-// 简单提取 HTML 中的文本内容
-function extractTextFromHTML(html) {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&amp;/g, '&')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, 2000); // 每条最多保留 2000 字
-}
-
-// 从 HTML 提取 <title> 标签
-function extractTitle(html, fallback) {
-  const m = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-  if (m && m[1].trim()) return m[1].trim();
-  // 尝试 h1
-  const h1 = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-  if (h1 && h1[1].trim()) return h1[1].replace(/<[^>]+>/g, '').trim();
-  return fallback;
-}
-
+// 递归收集所有文件
 function walkDir(dir) {
-  const results = [];
-  let entries;
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return results; }
-
-  for (const entry of entries) {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...walkDir(full));
-    } else if (entry.isFile()) {
-      const ext = path.extname(entry.name).toLowerCase();
-      const relativePath = path.relative(KNOWLEDGE_DIR, full).replace(/\\/g, '/');
-      const category = relativePath.split('/')[0] || '未分类';
-      results.push({ full, relativePath, ext, category });
+  let results = [];
+  const list = fs.readdirSync(dir);
+  list.forEach(file => {
+    const fullPath = path.join(dir, file);
+    const stat = fs.statSync(fullPath);
+    if (stat && stat.isDirectory()) {
+      results = results.concat(walkDir(fullPath));
+    } else {
+      results.push(fullPath);
     }
-  }
+  });
   return results;
 }
 
-async function main() {
-  console.log('[Index] 扫描 Knowledge 文件夹...');
-  const files = walkDir(KNOWLEDGE_DIR);
-  console.log(`[Index] 共发现 ${files.length} 个文件`);
+// 从 HTML 提取纯文本（改进版）
+function extractTextFromHtml(html) {
+  // 去掉 script 和 style 标签及其内容
+  let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, ' ');
+  text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, ' ');
+  // 去掉所有 HTML 标签
+  text = text.replace(/<[^>]+>/g, ' ');
+  // 解码 HTML 实体
+  text = text.replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&#\d+;/g, ''); // 去掉其他数字实体
+  // 合并空白字符
+  text = text.replace(/\s+/g, ' ').trim();
+  return text;
+}
+
+// 从文件路径推断分类
+function getCategory(filePath) {
+  const relativePath = filePath.replace(KNOWLEDGE_DIR, '');
+  const parts = relativePath.split(path.sep).filter(Boolean);
+  if (parts.length >= 2) {
+    return parts[0]; // 第一层文件夹名作为分类
+  }
+  return '未分类';
+}
+
+// 主函数
+async function buildIndex() {
+  console.log('开始扫描 Knowledge 文件夹...');
+  console.log('路径:', KNOWLEDGE_DIR);
+
+  const allFiles = walkDir(KNOWLEDGE_DIR);
+  console.log(`共找到 ${allFiles.length} 个文件`);
 
   const records = [];
+  let htmlCount = 0;
+  let pdfCount = 0;
+  let otherCount = 0;
 
-  for (const file of files) {
-    const { relativePath, ext, category } = file;
+  allFiles.forEach(filePath => {
+    const ext = path.extname(filePath).toLowerCase();
+    const fileName = path.basename(filePath, ext);
+    const relativePath = filePath.replace(KNOWLEDGE_DIR, '').replace(/^\//, '');
+    const category = getCategory(filePath);
 
     if (ext === '.html' || ext === '.htm') {
       try {
-        const html    = fs.readFileSync(file.full, 'utf8');
-        const title   = extractTitle(html, relativePath);
-        const content = extractTextFromHTML(html);
-        records.push({ title, content, path: relativePath, category, type: 'html' });
+        const html = fs.readFileSync(filePath, 'utf8');
+        const content = extractTextFromHtml(html);
+
+        records.push({
+          title: fileName,
+          path: relativePath,
+          type: 'html',
+          category: category,
+          content: content.slice(0, 2000), // 前2000字
+          contentLength: content.length
+        });
+        htmlCount++;
       } catch (e) {
-        console.error(`[Index] 读取失败: ${relativePath}`, e.message);
+        console.error(`读取失败: ${filePath}`, e.message);
       }
     } else if (ext === '.pdf') {
-      // PDF 无法读取内容，只记录文件名
-      const title = path.basename(file.relativePath, '.pdf');
-      records.push({ title, content: '', path: relativePath, category, type: 'pdf' });
-    } else if (ext === '.md' || ext === '.txt' || ext === '.csv') {
-      try {
-        const content = fs.readFileSync(file.full, 'utf8').slice(0, 2000);
-        const title  = path.basename(file.relativePath);
-        records.push({ title, content, path: relativePath, category, type: ext.slice(1) });
-      } catch (e) {
-        // skip
-      }
+      records.push({
+        title: fileName,
+        path: relativePath,
+        type: 'pdf',
+        category: category,
+        content: '',
+        contentLength: 0
+      });
+      pdfCount++;
+    } else {
+      otherCount++;
     }
-  }
+  });
 
-  const output = { total: records.length, generatedAt: new Date().toISOString(), records };
-  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(output, null, 2), 'utf8');
+  const result = {
+    total: records.length,
+    generatedAt: new Date().toISOString(),
+    records: records
+  };
 
-  const stats = fs.statSync(OUTPUT_FILE);
-  console.log(`[Index] 完成！输出 ${records.length} 条记录 → ${OUTPUT_FILE}`);
-  console.log(`[Index] 文件大小: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+  fs.writeFileSync(OUTPUT_FILE, JSON.stringify(result, null, 2), 'utf8');
+
+  console.log('\n索引生成完成！');
+  console.log(`HTML 文件: ${htmlCount} 个`);
+  console.log(`PDF 文件: ${pdfCount} 个`);
+  console.log(`其他文件: ${otherCount} 个`);
+  console.log(`总记录数: ${records.length}`);
+  console.log(`索引文件: ${OUTPUT_FILE}`);
+  console.log(`文件大小: ${(fs.statSync(OUTPUT_FILE).size / 1024 / 1024).toFixed(2)} MB`);
+
+  // 统计有正文的记录数
+  const withContent = records.filter(r => r.contentLength > 50);
+  console.log(`\n有正文内容（>50字）的记录: ${withContent.length} 条`);
+
+  // 显示前3条示例
+  console.log('\n前3条记录示例:');
+  records.slice(0, 3).forEach((r, i) => {
+    console.log(`[${i+1}] ${r.title}`);
+    console.log(`    分类: ${r.category}`);
+    console.log(`    正文长度: ${r.contentLength} 字`);
+    console.log(`    正文前100字: ${r.content.slice(0, 100)}`);
+    console.log('');
+  });
 }
 
-main().catch(e => { console.error('[Index] 错误:', e); process.exit(1); });
+buildIndex();
